@@ -1,4 +1,6 @@
 import subprocess
+import csv
+import re
 from pathlib import Path
 import shlex
 
@@ -9,24 +11,15 @@ import shlex
 
 FFMPEG_EXE = r"G:\Hetzner\OneDrive\Tools\ffmpeg\ffmpeg-8.1-full_build\bin\ffmpeg.exe"
 
+# CSV file with two columns: start_image, end_image (filenames only, no path)
+# Example row: 1967.aug.mp4-000020.png, 1967.aug.mp4-000327.png
+CSV_FILE = r"G:\Hetzner\Smalfilm enketlbilleder\Klip\clips.csv"
+
 # Folder containing the PNG images
-INPUT_FOLDER = r"G:\Hetzner\Smalfilm enketlbilleder\Klip\01-01-1967 aug.mp4"
+INPUT_FOLDER = r"G:\Hetzner\Smalfilm enketlbilleder\Klip"
 
-# Filename pattern for images in INPUT_FOLDER
-# Example filename:
-# 1967.aug.mp4-000020.png
-INPUT_PATTERN = "1967.aug.mp4-%06d.png"
-
-# First and last frame number
-FIRST_FRAME = 20
-LAST_FRAME = 327
-
-# Output folder where the film will be saved
-# OUTPUT_FOLDER = r"G:\Hetzner\Smalfilm enketlbilleder\Klip\01-01-1967 aug.mp4"
+# Output folder where the films will be saved
 OUTPUT_FOLDER = INPUT_FOLDER
-
-# Name of the finished film
-OUTPUT_FILENAME = "01-01-1967 aug_crf0.mp4"
 
 # FFmpeg settings
 FRAMERATE = 25
@@ -39,59 +32,47 @@ PIX_FMT = "yuv420p"
 # FUNCTIONS
 # ============================================================
 
-def calculate_frames_v(first_frame: int, last_frame: int) -> int:
+def parse_image_filename(filename: str) -> tuple[str, int, int]:
+    """Parse a filename like '1967.aug.mp4-000020.png' into (prefix, frame_number, zero_pad_width)."""
+    match = re.match(r'^(.+)-(\d+)\.png$', filename.strip(), re.IGNORECASE)
+    if not match:
+        raise ValueError(f"Cannot parse frame number from filename: {filename}")
+    prefix = match.group(1)
+    frame_str = match.group(2)
+    return prefix, int(frame_str), len(frame_str)
+
+
+def read_csv(csv_file: str) -> list[tuple[str, str]]:
+    clips = []
+    with open(csv_file, newline='', encoding='utf-8') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if len(row) < 2:
+                continue
+            start, end = row[0].strip(), row[1].strip()
+            # Skip header rows or empty rows
+            if not start.lower().endswith('.png') or not end.lower().endswith('.png'):
+                continue
+            clips.append((start, end))
+    return clips
+
+
+def calculate_frame_count(first_frame: int, last_frame: int) -> int:
     return last_frame - first_frame + 1
 
 
-def validate_settings() -> None:
-    ffmpeg_path = Path(FFMPEG_EXE)
-    input_folder = Path(INPUT_FOLDER)
-    output_folder = Path(OUTPUT_FOLDER)
-
-    if not ffmpeg_path.is_file():
-        raise FileNotFoundError(f"ffmpeg.exe not found:\n{ffmpeg_path}")
-
-    if not input_folder.is_dir():
-        raise FileNotFoundError(f"INPUT_FOLDER not found:\n{input_folder}")
-
-    if not output_folder.exists():
-        output_folder.mkdir(parents=True, exist_ok=True)
-
-    if FIRST_FRAME < 0:
-        raise ValueError("FIRST_FRAME must not be negative.")
-
-    if LAST_FRAME < FIRST_FRAME:
-        raise ValueError("LAST_FRAME must not be less than FIRST_FRAME.")
-
-    if FRAMERATE <= 0:
-        raise ValueError("FRAMERATE must be greater than 0.")
-
-    if CRF < 0:
-        raise ValueError("CRF must not be negative.")
-
-    if not INPUT_PATTERN.strip():
-        raise ValueError("INPUT_PATTERN must not be empty.")
-
-    if not OUTPUT_FILENAME.strip():
-        raise ValueError("OUTPUT_FILENAME must not be empty.")
-
-
-def build_paths() -> tuple[str, str]:
-    input_pattern_full = str(Path(INPUT_FOLDER) / INPUT_PATTERN)
-    output_file_full = str(Path(OUTPUT_FOLDER) / OUTPUT_FILENAME)
-    return input_pattern_full, output_file_full
-
-
-def build_ffmpeg_command() -> list[str]:
-    frames_v = calculate_frames_v(FIRST_FRAME, LAST_FRAME)
-    input_pattern_full, output_file_full = build_paths()
-
+def build_ffmpeg_command(
+    input_pattern_full: str,
+    first_frame: int,
+    frame_count: int,
+    output_file_full: str,
+) -> list[str]:
     return [
         FFMPEG_EXE,
         "-framerate", str(FRAMERATE),
-        "-start_number", str(FIRST_FRAME),
+        "-start_number", str(first_frame),
         "-i", input_pattern_full,
-        "-frames:v", str(frames_v),
+        "-frames:v", str(frame_count),
         "-c:v", VIDEO_CODEC,
         "-crf", str(CRF),
         "-pix_fmt", PIX_FMT,
@@ -99,42 +80,83 @@ def build_ffmpeg_command() -> list[str]:
     ]
 
 
-def print_summary() -> None:
-    frames_v = calculate_frames_v(FIRST_FRAME, LAST_FRAME)
-    input_pattern_full, output_file_full = build_paths()
+def process_clip(start_image: str, end_image: str) -> int:
+    prefix_start, first_frame, padding = parse_image_filename(start_image)
+    prefix_end, last_frame, _ = parse_image_filename(end_image)
 
-    print("Settings:")
-    print(f"  ffmpeg.exe   : {FFMPEG_EXE}")
-    print(f"  Input folder : {INPUT_FOLDER}")
-    print(f"  Input pattern: {INPUT_PATTERN}")
-    print(f"  First frame  : {FIRST_FRAME}")
-    print(f"  Last frame   : {LAST_FRAME}")
-    print(f"  Frames total : {frames_v}")
-    print(f"  Framerate    : {FRAMERATE}")
-    print(f"  Codec        : {VIDEO_CODEC}")
-    print(f"  CRF          : {CRF}")
-    print(f"  Pix fmt      : {PIX_FMT}")
-    print(f"  Output folder: {OUTPUT_FOLDER}")
+    if prefix_start != prefix_end:
+        raise ValueError(
+            f"Start and end images have different prefixes: '{prefix_start}' vs '{prefix_end}'"
+        )
+
+    if last_frame < first_frame:
+        raise ValueError(
+            f"End frame ({last_frame}) must not be less than start frame ({first_frame})."
+        )
+
+    frame_count = calculate_frame_count(first_frame, last_frame)
+    input_pattern = f"{prefix_start}-%0{padding}d.png"
+    input_pattern_full = str(Path(INPUT_FOLDER) / input_pattern)
+    output_filename = f"{prefix_start}-{first_frame:0{padding}d}-{last_frame:0{padding}d}_crf{CRF}.mp4"
+    output_file_full = str(Path(OUTPUT_FOLDER) / output_filename)
+
+    print(f"  Start image  : {start_image}")
+    print(f"  End image    : {end_image}")
+    print(f"  First frame  : {first_frame}")
+    print(f"  Last frame   : {last_frame}")
+    print(f"  Frame count  : {frame_count}")
+    print(f"  Input pattern: {input_pattern_full}")
     print(f"  Output file  : {output_file_full}")
-    print(f"  Input full   : {input_pattern_full}")
     print()
 
-
-def print_command(cmd: list[str]) -> None:
+    cmd = build_ffmpeg_command(input_pattern_full, first_frame, frame_count, output_file_full)
     print("Command being run:")
     print(" ".join(shlex.quote(part) for part in cmd))
     print()
 
+    return subprocess.run(cmd, check=False).returncode
 
-def run_ffmpeg() -> int:
-    validate_settings()
-    print_summary()
 
-    cmd = build_ffmpeg_command()
-    print_command(cmd)
+def validate_paths() -> None:
+    if not Path(FFMPEG_EXE).is_file():
+        raise FileNotFoundError(f"ffmpeg.exe not found:\n{FFMPEG_EXE}")
+    if not Path(CSV_FILE).is_file():
+        raise FileNotFoundError(f"CSV file not found:\n{CSV_FILE}")
+    if not Path(INPUT_FOLDER).is_dir():
+        raise FileNotFoundError(f"INPUT_FOLDER not found:\n{INPUT_FOLDER}")
+    Path(OUTPUT_FOLDER).mkdir(parents=True, exist_ok=True)
 
-    process = subprocess.run(cmd, check=False)
-    return process.returncode
+
+def run_from_csv() -> None:
+    validate_paths()
+
+    clips = read_csv(CSV_FILE)
+    if not clips:
+        raise ValueError("CSV file contains no valid rows.")
+
+    print(f"Found {len(clips)} clip(s) in: {CSV_FILE}")
+    print(f"ffmpeg      : {FFMPEG_EXE}")
+    print(f"Input folder: {INPUT_FOLDER}")
+    print(f"Framerate   : {FRAMERATE}  Codec: {VIDEO_CODEC}  CRF: {CRF}  Pix fmt: {PIX_FMT}")
+    print()
+
+    results = []
+    for i, (start_image, end_image) in enumerate(clips, start=1):
+        print(f"--- Clip {i}/{len(clips)} ---")
+        try:
+            exit_code = process_clip(start_image, end_image)
+            status = "OK" if exit_code == 0 else f"FAILED (exit code {exit_code})"
+        except Exception as e:
+            exit_code = -1
+            status = f"ERROR: {e}"
+        results.append((i, start_image, end_image, status))
+        print(f"Result: {status}")
+        print()
+
+    print("=" * 60)
+    print("Summary:")
+    for i, start, end, status in results:
+        print(f"  Clip {i}: {start} -> {end}  [{status}]")
 
 
 # ============================================================
@@ -143,14 +165,7 @@ def run_ffmpeg() -> int:
 
 if __name__ == "__main__":
     try:
-        exit_code = run_ffmpeg()
-        print()
-        print(f"FFmpeg finished with exit code: {exit_code}")
-
-        if exit_code == 0:
-            print("Video created successfully.")
-        else:
-            print("FFmpeg reported an error.")
+        run_from_csv()
     except Exception as e:
         print()
         print("Error:")
