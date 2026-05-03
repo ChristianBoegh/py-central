@@ -33,18 +33,18 @@ def parse_image_filename(filename: str) -> tuple[str, int, int]:
     return prefix, int(frame_str), len(frame_str)
 
 
-def read_csv(csv_file: str) -> list[tuple[str, str]]:
+def read_csv(csv_file: str) -> list[tuple[str, str, str]]:
     clips = []
     with open(csv_file, newline='', encoding='utf-8') as f:
         reader = csv.reader(f)
         for row in reader:
-            if len(row) < 2:
+            if len(row) < 3:
                 continue
-            start, end = row[0].strip(), row[1].strip()
+            label, start, end = row[0].strip(), row[1].strip(), row[2].strip()
             # Skip header rows or empty rows
             if not start.lower().endswith('.png') or not end.lower().endswith('.png'):
                 continue
-            clips.append((start, end))
+            clips.append((label, start, end))
     return clips
 
 
@@ -71,7 +71,7 @@ def build_ffmpeg_command(
     ]
 
 
-def process_clip(start_image: str, end_image: str, image_folder: Path) -> int:
+def process_clip(label: str, start_image: str, end_image: str, image_folder: Path) -> int:
     prefix_start, first_frame, padding = parse_image_filename(start_image)
     prefix_end, last_frame, _ = parse_image_filename(end_image)
 
@@ -88,9 +88,10 @@ def process_clip(start_image: str, end_image: str, image_folder: Path) -> int:
     frame_count = calculate_frame_count(first_frame, last_frame)
     input_pattern = f"{prefix_start}-%0{padding}d.png"
     input_pattern_full = str(image_folder / input_pattern)
-    output_filename = f"{prefix_start}-{first_frame:0{padding}d}-{last_frame:0{padding}d}_crf{CRF}.mp4"
+    output_filename = f"{label}_{prefix_start}-{first_frame:0{padding}d}-{last_frame:0{padding}d}_crf{CRF}.mp4"
     output_file_full = str(image_folder / output_filename)
 
+    print(f"  Label        : {label}")
     print(f"  Start image  : {start_image}")
     print(f"  End image    : {end_image}")
     print(f"  First frame  : {first_frame}")
@@ -132,22 +133,22 @@ def run_from_csv(csv_file: str) -> None:
     print()
 
     results = []
-    for i, (start_image, end_image) in enumerate(clips, start=1):
+    for i, (label, start_image, end_image) in enumerate(clips, start=1):
         print(f"--- Clip {i}/{len(clips)} ---")
         try:
-            exit_code = process_clip(start_image, end_image, image_folder)
+            exit_code = process_clip(label, start_image, end_image, image_folder)
             status = "OK" if exit_code == 0 else f"FAILED (exit code {exit_code})"
         except Exception as e:
             exit_code = -1
             status = f"ERROR: {e}"
-        results.append((i, start_image, end_image, status))
+        results.append((i, label, start_image, end_image, status))
         print(f"Result: {status}")
         print()
 
     print("=" * 60)
     print("Summary:")
-    for i, start, end, status in results:
-        print(f"  Clip {i}: {start} -> {end}  [{status}]")
+    for i, label, start, end, status in results:
+        print(f"  Clip {i}: [{label}] {start} -> {end}  [{status}]")
 
 
 # ============================================================
