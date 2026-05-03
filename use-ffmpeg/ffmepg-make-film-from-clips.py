@@ -4,31 +4,31 @@ import shlex
 
 
 # ============================================================
-# INDSTILLINGER
+# SETTINGS
 # ============================================================
 
 FFMPEG_EXE = r"G:\Hetzner\OneDrive\Tools\ffmpeg\ffmpeg-8.1-full_build\bin\ffmpeg.exe"
 
-# Mappen hvor PNG-billederne ligger
+# Folder containing the PNG images
 INPUT_FOLDER = r"G:\Hetzner\Smalfilm enketlbilleder\Klip\01-01-1967 aug.mp4"
 
-# Filnavnsmønster for billederne i INPUT_FOLDER
-# Eksempel på filnavn:
+# Filename pattern for images in INPUT_FOLDER
+# Example filename:
 # 1967.aug.mp4-000020.png
 INPUT_PATTERN = "1967.aug.mp4-%06d.png"
 
-# Første og sidste frame-nummer
+# First and last frame number
 FIRST_FRAME = 20
 LAST_FRAME = 327
 
-# Output-mappe hvor filmen skal gemmes
+# Output folder where the film will be saved
 # OUTPUT_FOLDER = r"G:\Hetzner\Smalfilm enketlbilleder\Klip\01-01-1967 aug.mp4"
 OUTPUT_FOLDER = INPUT_FOLDER
 
-# Navn på den færdige film
+# Name of the finished film
 OUTPUT_FILENAME = "01-01-1967 aug_crf0.mp4"
 
-# FFmpeg-indstillinger
+# FFmpeg settings
 FRAMERATE = 25
 VIDEO_CODEC = "libx264"
 CRF = 0
@@ -36,7 +36,7 @@ PIX_FMT = "yuv420p"
 
 
 # ============================================================
-# FUNKTIONER
+# FUNCTIONS
 # ============================================================
 
 def calculate_frames_v(first_frame: int, last_frame: int) -> int:
@@ -49,31 +49,31 @@ def validate_settings() -> None:
     output_folder = Path(OUTPUT_FOLDER)
 
     if not ffmpeg_path.is_file():
-        raise FileNotFoundError(f"ffmpeg.exe blev ikke fundet:\n{ffmpeg_path}")
+        raise FileNotFoundError(f"ffmpeg.exe not found:\n{ffmpeg_path}")
 
     if not input_folder.is_dir():
-        raise FileNotFoundError(f"INPUT_FOLDER blev ikke fundet:\n{input_folder}")
+        raise FileNotFoundError(f"INPUT_FOLDER not found:\n{input_folder}")
 
     if not output_folder.exists():
         output_folder.mkdir(parents=True, exist_ok=True)
 
     if FIRST_FRAME < 0:
-        raise ValueError("FIRST_FRAME må ikke være negativ.")
+        raise ValueError("FIRST_FRAME must not be negative.")
 
     if LAST_FRAME < FIRST_FRAME:
-        raise ValueError("LAST_FRAME må ikke være mindre end FIRST_FRAME.")
+        raise ValueError("LAST_FRAME must not be less than FIRST_FRAME.")
 
     if FRAMERATE <= 0:
-        raise ValueError("FRAMERATE skal være større end 0.")
+        raise ValueError("FRAMERATE must be greater than 0.")
 
     if CRF < 0:
-        raise ValueError("CRF må ikke være negativ.")
+        raise ValueError("CRF must not be negative.")
 
     if not INPUT_PATTERN.strip():
-        raise ValueError("INPUT_PATTERN må ikke være tom.")
+        raise ValueError("INPUT_PATTERN must not be empty.")
 
     if not OUTPUT_FILENAME.strip():
-        raise ValueError("OUTPUT_FILENAME må ikke være tom.")
+        raise ValueError("OUTPUT_FILENAME must not be empty.")
 
 
 def build_paths() -> tuple[str, str]:
@@ -103,7 +103,7 @@ def print_summary() -> None:
     frames_v = calculate_frames_v(FIRST_FRAME, LAST_FRAME)
     input_pattern_full, output_file_full = build_paths()
 
-    print("Indstillinger:")
+    print("Settings:")
     print(f"  ffmpeg.exe   : {FFMPEG_EXE}")
     print(f"  Input folder : {INPUT_FOLDER}")
     print(f"  Input pattern: {INPUT_PATTERN}")
@@ -121,7 +121,7 @@ def print_summary() -> None:
 
 
 def print_command(cmd: list[str]) -> None:
-    print("Kommando som køres:")
+    print("Command being run:")
     print(" ".join(shlex.quote(part) for part in cmd))
     print()
 
@@ -145,13 +145,13 @@ if __name__ == "__main__":
     try:
         exit_code = run_ffmpeg()
         print()
-        print(f"FFmpeg afsluttede med exit code: {exit_code}")
+        print(f"FFmpeg finished with exit code: {exit_code}")
 
         if exit_code == 0:
-            print("Videoen blev oprettet uden fejl.")
+            print("Video created successfully.")
         else:
-            print("FFmpeg rapporterede en fejl.")
+            print("FFmpeg reported an error.")
     except Exception as e:
         print()
-        print("Fejl:")
+        print("Error:")
         print(e)
