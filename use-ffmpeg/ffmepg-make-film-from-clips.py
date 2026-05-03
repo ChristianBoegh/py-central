@@ -1,3 +1,4 @@
+import argparse
 import subprocess
 import csv
 import re
@@ -10,10 +11,6 @@ import shlex
 # ============================================================
 
 FFMPEG_EXE = r"G:\Hetzner\OneDrive\Tools\ffmpeg\ffmpeg-8.1-full_build\bin\ffmpeg.exe"
-
-# CSV file with two columns: start_image, end_image (filenames only, no path)
-# Example row: 1967.aug.mp4-000020.png, 1967.aug.mp4-000327.png
-CSV_FILE = r"G:\Hetzner\Smalfilm enketlbilleder\Klip\clips.csv"
 
 # Folder containing the PNG images
 INPUT_FOLDER = r"G:\Hetzner\Smalfilm enketlbilleder\Klip"
@@ -117,24 +114,24 @@ def process_clip(start_image: str, end_image: str) -> int:
     return subprocess.run(cmd, check=False).returncode
 
 
-def validate_paths() -> None:
+def validate_paths(csv_file: str) -> None:
     if not Path(FFMPEG_EXE).is_file():
         raise FileNotFoundError(f"ffmpeg.exe not found:\n{FFMPEG_EXE}")
-    if not Path(CSV_FILE).is_file():
-        raise FileNotFoundError(f"CSV file not found:\n{CSV_FILE}")
+    if not Path(csv_file).is_file():
+        raise FileNotFoundError(f"CSV file not found:\n{csv_file}")
     if not Path(INPUT_FOLDER).is_dir():
         raise FileNotFoundError(f"INPUT_FOLDER not found:\n{INPUT_FOLDER}")
     Path(OUTPUT_FOLDER).mkdir(parents=True, exist_ok=True)
 
 
-def run_from_csv() -> None:
-    validate_paths()
+def run_from_csv(csv_file: str) -> None:
+    validate_paths(csv_file)
 
-    clips = read_csv(CSV_FILE)
+    clips = read_csv(csv_file)
     if not clips:
         raise ValueError("CSV file contains no valid rows.")
 
-    print(f"Found {len(clips)} clip(s) in: {CSV_FILE}")
+    print(f"Found {len(clips)} clip(s) in: {csv_file}")
     print(f"ffmpeg      : {FFMPEG_EXE}")
     print(f"Input folder: {INPUT_FOLDER}")
     print(f"Framerate   : {FRAMERATE}  Codec: {VIDEO_CODEC}  CRF: {CRF}  Pix fmt: {PIX_FMT}")
@@ -164,8 +161,12 @@ def run_from_csv() -> None:
 # ============================================================
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Create films from PNG clips using ffmpeg.")
+    parser.add_argument("csv_file", help="Path to CSV file with start/end image columns")
+    args = parser.parse_args()
+
     try:
-        run_from_csv()
+        run_from_csv(args.csv_file)
     except Exception as e:
         print()
         print("Error:")
