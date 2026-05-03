@@ -12,12 +12,6 @@ import shlex
 
 FFMPEG_EXE = r"G:\Hetzner\OneDrive\Tools\ffmpeg\ffmpeg-8.1-full_build\bin\ffmpeg.exe"
 
-# Folder containing the PNG images
-INPUT_FOLDER = r"G:\Hetzner\Smalfilm enketlbilleder\Klip"
-
-# Output folder where the films will be saved
-OUTPUT_FOLDER = INPUT_FOLDER
-
 # FFmpeg settings
 FRAMERATE = 25
 VIDEO_CODEC = "libx264"
@@ -77,7 +71,7 @@ def build_ffmpeg_command(
     ]
 
 
-def process_clip(start_image: str, end_image: str) -> int:
+def process_clip(start_image: str, end_image: str, image_folder: Path) -> int:
     prefix_start, first_frame, padding = parse_image_filename(start_image)
     prefix_end, last_frame, _ = parse_image_filename(end_image)
 
@@ -93,9 +87,9 @@ def process_clip(start_image: str, end_image: str) -> int:
 
     frame_count = calculate_frame_count(first_frame, last_frame)
     input_pattern = f"{prefix_start}-%0{padding}d.png"
-    input_pattern_full = str(Path(INPUT_FOLDER) / input_pattern)
+    input_pattern_full = str(image_folder / input_pattern)
     output_filename = f"{prefix_start}-{first_frame:0{padding}d}-{last_frame:0{padding}d}_crf{CRF}.mp4"
-    output_file_full = str(Path(OUTPUT_FOLDER) / output_filename)
+    output_file_full = str(image_folder / output_filename)
 
     print(f"  Start image  : {start_image}")
     print(f"  End image    : {end_image}")
@@ -114,34 +108,34 @@ def process_clip(start_image: str, end_image: str) -> int:
     return subprocess.run(cmd, check=False).returncode
 
 
-def validate_paths(csv_file: str) -> None:
+def validate_paths(csv_file: str, image_folder: Path) -> None:
     if not Path(FFMPEG_EXE).is_file():
         raise FileNotFoundError(f"ffmpeg.exe not found:\n{FFMPEG_EXE}")
     if not Path(csv_file).is_file():
         raise FileNotFoundError(f"CSV file not found:\n{csv_file}")
-    if not Path(INPUT_FOLDER).is_dir():
-        raise FileNotFoundError(f"INPUT_FOLDER not found:\n{INPUT_FOLDER}")
-    Path(OUTPUT_FOLDER).mkdir(parents=True, exist_ok=True)
+    if not image_folder.is_dir():
+        raise FileNotFoundError(f"Image folder not found:\n{image_folder}")
 
 
 def run_from_csv(csv_file: str) -> None:
-    validate_paths(csv_file)
+    image_folder = Path(csv_file).parent
+    validate_paths(csv_file, image_folder)
 
     clips = read_csv(csv_file)
     if not clips:
         raise ValueError("CSV file contains no valid rows.")
 
     print(f"Found {len(clips)} clip(s) in: {csv_file}")
-    print(f"ffmpeg      : {FFMPEG_EXE}")
-    print(f"Input folder: {INPUT_FOLDER}")
-    print(f"Framerate   : {FRAMERATE}  Codec: {VIDEO_CODEC}  CRF: {CRF}  Pix fmt: {PIX_FMT}")
+    print(f"ffmpeg       : {FFMPEG_EXE}")
+    print(f"Image folder : {image_folder}")
+    print(f"Framerate    : {FRAMERATE}  Codec: {VIDEO_CODEC}  CRF: {CRF}  Pix fmt: {PIX_FMT}")
     print()
 
     results = []
     for i, (start_image, end_image) in enumerate(clips, start=1):
         print(f"--- Clip {i}/{len(clips)} ---")
         try:
-            exit_code = process_clip(start_image, end_image)
+            exit_code = process_clip(start_image, end_image, image_folder)
             status = "OK" if exit_code == 0 else f"FAILED (exit code {exit_code})"
         except Exception as e:
             exit_code = -1
