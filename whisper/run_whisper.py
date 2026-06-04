@@ -7,6 +7,7 @@ Default config file: whisper_config.md
 import re
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 
@@ -40,7 +41,6 @@ def parse_config(md_path: Path) -> tuple[list[str], str, list[str]]:
                     break
 
         elif header == "parameters":
-            # Collect all checked parameters from sub-sections
             for line in lines[1:]:
                 line = line.strip()
                 if re.match(r"-\s*\[x\]", line, re.IGNORECASE):
@@ -49,6 +49,16 @@ def parse_config(md_path: Path) -> tuple[list[str], str, list[str]]:
                         parameters.extend(param.split())
 
     return input_files, output_folder, parameters
+
+
+def format_duration(seconds: float) -> str:
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h:
+        return f"{h}h {m:02}m {s:02}s"
+    if m:
+        return f"{m}m {s:02}s"
+    return f"{s}s"
 
 
 def run_whisper(config_path: Path) -> None:
@@ -64,16 +74,43 @@ def run_whisper(config_path: Path) -> None:
 
     Path(output_folder).mkdir(parents=True, exist_ok=True)
 
-    total = len(input_files)
-    for i, file_path in enumerate(input_files, start=1):
-        print(f"\n[{i}/{total}] Processing: {file_path}")
-        cmd = ["whisper", file_path, "--output_dir", output_folder] + parameters
-        print("Command:", " ".join(f'"{c}"' if " " in c else c for c in cmd))
-        result = subprocess.run(cmd)
-        if result.returncode != 0:
-            print(f"  WARNING: whisper exited with code {result.returncode} for {file_path}")
+    log_path = Path(output_folder) / "whisper_log.md"
+    batch_start = datetime.now()
+
+    with log_path.open("a", encoding="utf-8") as log:
+        log.write(f"\n## Batch started {batch_start.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        log.write(f"Config: `{config_path}`  \n")
+        log.write(f"Parameters: `{' '.join(parameters)}`  \n\n")
+        log.write("| # | File | Status | Duration |\n")
+        log.write("|---|------|--------|----------|\n")
+
+        total = len(input_files)
+        ok_count = 0
+
+        for i, file_path in enumerate(input_files, start=1):
+            print(f"\n[{i}/{total}] Processing: {file_path}")
+            cmd = ["whisper", file_path, "--output_dir", output_folder] + parameters
+            print("Command:", " ".join(f'"{c}"' if " " in c else c for c in cmd))
+
+            t_start = datetime.now()
+            result = subprocess.run(cmd)
+            duration = (datetime.now() - t_start).total_seconds()
+
+            if result.returncode == 0:
+                status = "OK"
+                ok_count += 1
+            else:
+                status = f"FAILED (exit {result.returncode})"
+                print(f"  WARNING: whisper exited with code {result.returncode} for {file_path}")
+
+            log.write(f"| {i} | {file_path} | {status} | {format_duration(duration)} |\n")
+            log.flush()
+
+        total_duration = (datetime.now() - batch_start).total_seconds()
+        log.write(f"\n**Total:** {ok_count}/{total} succeeded — {format_duration(total_duration)}\n")
 
     print(f"\nDone. Processed {total} file(s). Output in: {output_folder}")
+    print(f"Log: {log_path}")
 
 
 if __name__ == "__main__":
