@@ -78,13 +78,20 @@ def run_whisper(config_path: Path) -> None:
     batch_start = datetime.now()
 
     with log_path.open("a", encoding="utf-8") as log:
+        total = len(input_files)
+
+        # Write header and planned file list up front so progress is visible
         log.write(f"\n## Batch started {batch_start.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
         log.write(f"Config: `{config_path}`  \n")
         log.write(f"Parameters: `{' '.join(parameters)}`  \n\n")
+        log.write(f"### Queued ({total} files)\n\n")
+        for i, file_path in enumerate(input_files, start=1):
+            log.write(f"{i}. {file_path}\n")
+        log.write("\n### Results\n\n")
         log.write("| # | File | Status | Duration |\n")
         log.write("|---|------|--------|----------|\n")
+        log.flush()
 
-        total = len(input_files)
         ok_count = 0
 
         for i, file_path in enumerate(input_files, start=1):

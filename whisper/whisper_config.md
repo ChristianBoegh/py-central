@@ -1,5 +1,29 @@
 # Whisper Batch Config
 
+## How to install
+
+### Requirements
+- **Python 3.8+** — https://www.python.org/downloads/
+- **ffmpeg** — required by whisper for audio decoding. Install and make sure it is on your PATH:
+  - Windows: `winget install ffmpeg` or download from https://ffmpeg.org/download.html
+  - Verify: `ffmpeg -version`
+- **openai-whisper** — the transcription engine:
+  ```
+  pip install openai-whisper
+  ```
+- **PyTorch** — installed automatically with openai-whisper. For GPU (faster), install the CUDA version manually first:
+  - https://pytorch.org/get-started/locally/
+  - Verify GPU is used: run with `--device cuda` (see Compute section below)
+
+### Quick check
+Run this to confirm everything is ready before starting a batch:
+```
+whisper --help
+ffmpeg -version
+```
+
+---
+
 ## Input Files
 - C:\whisper-input\file-1.mp3
 - C:\whisper-input\file-2.mp3
