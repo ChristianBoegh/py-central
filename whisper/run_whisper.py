@@ -61,6 +61,32 @@ def format_duration(seconds: float) -> str:
     return f"{s}s"
 
 
+def rotate_log(log_path: Path) -> None:
+    """Rotate existing log files: whisper_log.md -> whisper_log_1.md,
+    whisper_log_1.md -> whisper_log_2.md, etc."""
+    if not log_path.exists():
+        return
+
+    # Find the highest existing backup number
+    n = 1
+    while log_path.with_stem(f"whisper_log_{n}").exists():
+        n += 1
+
+    # Shift backups upward from highest to lowest
+    for i in range(n, 1, -1):
+        log_path.with_stem(f"whisper_log_{i - 1}").rename(
+            log_path.with_stem(f"whisper_log_{i}")
+        )
+
+    # Move current log to _1
+    log_path.rename(log_path.with_stem("whisper_log_1"))
+
+
+def ts() -> str:
+    """Current timestamp as a readable string."""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
 def run_whisper(config_path: Path) -> None:
     input_files, output_folder, parameters = parse_config(config_path)
 
@@ -75,31 +101,35 @@ def run_whisper(config_path: Path) -> None:
     Path(output_folder).mkdir(parents=True, exist_ok=True)
 
     log_path = Path(output_folder) / "whisper_log.md"
+    rotate_log(log_path)
+
     batch_start = datetime.now()
 
-    with log_path.open("a", encoding="utf-8") as log:
+    with log_path.open("w", encoding="utf-8") as log:
         total = len(input_files)
 
         # Write header and planned file list up front so progress is visible
-        log.write(f"\n## Batch started {batch_start.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        log.write(f"Config: `{config_path}`  \n")
-        log.write(f"Parameters: `{' '.join(parameters)}`  \n\n")
-        log.write(f"### Queued ({total} files)\n\n")
+        log.write(f"# Whisper Log\n\n")
+        log.write(f"**Started:** {ts()}  \n")
+        log.write(f"**Config:** `{config_path}`  \n")
+        log.write(f"**Parameters:** `{' '.join(parameters)}`  \n\n")
+        log.write(f"## Queued ({total} files)\n\n")
         for i, file_path in enumerate(input_files, start=1):
             log.write(f"{i}. {file_path}\n")
-        log.write("\n### Results\n\n")
-        log.write("| # | File | Status | Duration |\n")
-        log.write("|---|------|--------|----------|\n")
+        log.write("\n## Results\n\n")
+        log.write("| # | Started | File | Status | Duration |\n")
+        log.write("|---|---------|------|--------|----------|\n")
         log.flush()
 
         ok_count = 0
 
         for i, file_path in enumerate(input_files, start=1):
-            print(f"\n[{i}/{total}] Processing: {file_path}")
+            t_start = datetime.now()
+            started_at = t_start.strftime("%H:%M:%S")
+            print(f"\n[{i}/{total}] {started_at} Processing: {file_path}")
             cmd = ["whisper", file_path, "--output_dir", output_folder] + parameters
             print("Command:", " ".join(f'"{c}"' if " " in c else c for c in cmd))
 
-            t_start = datetime.now()
             result = subprocess.run(cmd)
             duration = (datetime.now() - t_start).total_seconds()
 
@@ -110,11 +140,12 @@ def run_whisper(config_path: Path) -> None:
                 status = f"FAILED (exit {result.returncode})"
                 print(f"  WARNING: whisper exited with code {result.returncode} for {file_path}")
 
-            log.write(f"| {i} | {file_path} | {status} | {format_duration(duration)} |\n")
+            log.write(f"| {i} | {started_at} | {file_path} | {status} | {format_duration(duration)} |\n")
             log.flush()
 
         total_duration = (datetime.now() - batch_start).total_seconds()
-        log.write(f"\n**Total:** {ok_count}/{total} succeeded — {format_duration(total_duration)}\n")
+        log.write(f"\n**Finished:** {ts()}  \n")
+        log.write(f"**Total:** {ok_count}/{total} succeeded — {format_duration(total_duration)}\n")
 
     print(f"\nDone. Processed {total} file(s). Output in: {output_folder}")
     print(f"Log: {log_path}")
